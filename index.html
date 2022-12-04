@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head><!--__________________________________________________________________________________________Head-->
+
+<title>LUNC Guardians™</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+
+<style>
+	body { margin: 0; }
+	#background { z-index: -1; position: absolute; }
+  #menu { z-index: 0; position: absolute; pointer-events: none }
+</style>
+
+</head><!--_________________________________________________________________________________________/Head-->
+
+<body><!--__________________________________________________________________________________________Body-->
+
+<canvas id="background"></canvas>
+<canvas id="menu"></canvas>
+
+<script src="https://threejs.org/build/three.js"></script>
+<script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.6/dat.gui.min.js"></script>
+<script src="https://threejs.org/examples/js/geometries/TextGeometry.js"></script>
+<script src="https://threejs.org/examples/js/loaders/FontLoader.js"></script>
+<script src="https://threejs.org/examples/js/loaders/FBXLoader.js"></script>
+<script src="https://threejs.org/examples/js/libs/fflate.min.js"></script>
+<script src="https://threejs.org/examples/js/objects/Sky.js"></script>
+<script src="https://threejs.org/examples/js/objects/Water.js"></script>
+
+<script src="./three.interaction.js"></script>
+<script src="./creators.js"></script>
+
+<script>
+
+let controls;
+
+const background = document.getElementById( 'background' );
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera( 55, window.innerWidth / window.innerHeight, 1, 20000 );
+camera.position.set( 0, 30, 120 );
+const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('#background'), antialias: true, 	alpha: true});
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setSize( window.innerWidth, window.innerHeight );
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+
+const sun = new THREE.Vector3();
+
+// Water
+
+const waterGeometry = new THREE.PlaneGeometry( 10000, 10000 );
+
+const water = new THREE.Water(
+	waterGeometry,
+	{
+		textureWidth: 512,
+		textureHeight: 512,
+		waterNormals: new THREE.TextureLoader().load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/waternormals.jpg', function ( texture ) {
+
+			texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+
+		} ),
+		sunDirection: new THREE.Vector3(),
+		sunColor: 'red',
+		waterColor: 0x001e0f,
+		distortionScale: 3.7,
+		fog: scene.fog !== undefined
+	}
+);
+
+water.rotation.x = - Math.PI / 2;
+
+scene.add( water );
+
+// Skybox
+
+const sky = new THREE.Sky();
+sky.scale.setScalar( 10000 );
+scene.add( sky );
+
+const skyUniforms = sky.material.uniforms;
+
+skyUniforms[ 'turbidity' ].value = 10;
+skyUniforms[ 'rayleigh' ].value = 1;
+skyUniforms[ 'mieCoefficient' ].value = 0.005;
+skyUniforms[ 'mieDirectionalG' ].value = 1;
+
+const parameters = {
+	elevation: 1,
+	azimuth: 180
+};
+
+const pmremGenerator = new THREE.PMREMGenerator( renderer );
+let renderTarget;
+
+function updateSun() {
+
+	const phi = THREE.MathUtils.degToRad( 90 - parameters.elevation );
+	const theta = THREE.MathUtils.degToRad( parameters.azimuth );
+
+	sun.setFromSphericalCoords( 1, phi, theta );
+
+	sky.material.uniforms[ 'sunPosition' ].value.copy( sun );
+	water.material.uniforms[ 'sunDirection' ].value.copy( sun ).normalize();
+
+	if ( renderTarget !== undefined ) renderTarget.dispose();
+
+	renderTarget = pmremGenerator.fromScene( sky );
+
+	scene.environment = renderTarget.texture;
+
+}
+
+updateSun();
+
+// luna
+
+const light = new THREE.PointLight( 'white', 10, 100 );
+light.position.set( 50, 50, 50 );
+scene.add( light );
+
+var luna;
+const fbxLoader = new THREE.FBXLoader();
+
+fbxLoader.load( 'luna.fbx', function ( object ) {
+
+	object.traverse( function ( child ) {
+		child.material = new THREE.MeshStandardMaterial( { color: 0xfcba03 } );
+		child.scale.set( 1.1, 1.1, 1.1 )
+	});
+
+	luna = object;
+	luna.rotation.x = -Math.PI / 2;
+	scene.add(luna);
+	animate();
+
+});
+
+// controls
+
+controls = new THREE.OrbitControls( camera, renderer.domElement );
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.target.set( 0, 32, 0 );
+controls.minDistance = 40.0;
+controls.maxDistance = 400.0;
+controls.update();
+
+// GUI
+
+// const gui = new dat.GUI();
+//
+// const folderSky = gui.addFolder( 'Sky' );
+// folderSky.add( parameters, 'elevation', 0, 90, 0.1 ).onChange( updateSun );
+// folderSky.add( parameters, 'azimuth', - 180, 180, 0.1 ).onChange( updateSun );
+// folderSky.open();
+
+// const waterUniforms = water.material.uniforms;
+//
+// const folderWater = gui.addFolder( 'Water' );
+// folderWater.add( waterUniforms.distortionScale, 'value', 0, 8, 0.1 ).name( 'distortionScale' );
+// folderWater.add( waterUniforms.size, 'value', 0.1, 10, 0.1 ).name( 'size' );
+// folderWater.open();
+
+//--------------------------------------------------------------------------------------------------Menu
+
+var aspect = window.innerWidth / window.innerHeight;
+var menuCanvas = document.querySelector('#menu');
+var fs = 5;
+var menuScene = new THREE.Scene();
+var menuCamera = new THREE.OrthographicCamera( fs * aspect / - 2, fs * aspect / 2, fs / 2, fs / - 2, 0.1, 100 );
+var menuRenderer = new THREE.WebGLRenderer({ canvas: menuCanvas, antialias: true, alpha: true});
+menuRenderer.setPixelRatio(window.devicePixelRatio);
+menuRenderer.setSize( window.innerWidth, window.innerHeight );
+menuCamera.position.z = 5;
+
+var interaction = new THREE.Interaction(renderer, menuScene, menuCamera);
+
+var x = 4
+const createButtons = () => {
+
+	x = window.innerWidth / 700
+
+	let s = 0.13 - remap(window.innerWidth, 1920, 0, 0, 0.04);
+
+	let color = 'darkorange';
+
+  button(Montserrat, "twitter", s , point(-x,1.2,0) , color, 0xF5986E, playSound, "left", menuScene, "https://twitter.com/OgLuncArmy" );
+  button(Montserrat, "discord", s , point(-x,0.4,0) , color, 0xF5986E, playSound, "left", menuScene, "https://discord.gg/hVTSJy7mq4" );
+  button(Montserrat, "youtube", s , point(-x,-0.4,0) , color, 0xF5986E, playSound, "left", menuScene );
+  button(Montserrat, "merch", s , point(-x,-1.2,0) , color, 0xF5986E, playSound, "left", menuScene );
+
+  button(Montserrat, "about us", s , point(x,1.2,0) , color, 0xF5986E, playSound, "right", menuScene );
+  button(Montserrat, "roadmap", s , point(x,0.4,0) , color, 0xF5986E, playSound, "right", menuScene );
+  button(Montserrat, "validator", s , point(x,-0.4,0) , color, 0xF5986E, playSound, "right", menuScene, "https://thecryptoplatform.github.io/" );
+  button(Montserrat, "metaverse", s , point(x,-1.2,0) , color, 0xF5986E, playSound, "right", menuScene );
+
+  button(Montserrat, "LUNC Guardians™", s * 1.5 , point(0,2,0) , 'yellow', 0xF5986E, playSound, "none", menuScene );
+};
+
+createButtons();
+
+function recreateButtons() {
+
+  buttons.forEach((element) => {
+  	menuScene.remove(element);
+  });
+
+  buttons = [];
+
+	createButtons();
+
+};
+
+function animate() {
+
+	requestAnimationFrame( animate );
+
+  const time = performance.now() * 0.001;
+
+  luna.position.y = Math.sin( time ) * 23 + 9;
+  // luna.rotation.x = time * 0.5 ;
+  luna.rotation.z = time * 0.5;
+
+	// parameters.azimuth -= 0.01;
+	// updateSun();
+
+  water.material.uniforms[ 'time' ].value += 1.0 / 60.0;
+
+	menuRenderer.render( menuScene, menuCamera );
+  renderer.render( scene, camera );
+
+};
+
+var doit;
+
+function onWindowResize() {
+
+	clearTimeout(doit);
+  doit = setTimeout(recreateButtons, 100);
+
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize( window.innerWidth, window.innerHeight );
+
+  aspect = window.innerWidth / window.innerHeight;
+
+  menuCamera.left = fs * aspect / - 2;
+  menuCamera.right = fs * aspect / 2;
+  menuCamera.top = fs / 2;
+  menuCamera.bottom = - fs / 2;
+
+  menuCamera.updateProjectionMatrix();
+  menuRenderer.setSize( window.innerWidth, window.innerHeight );
+
+};
+
+window.addEventListener( 'resize', onWindowResize );
+
+</script>
+</body><!--_________________________________________________________________________________________/Body-->
+</html>
